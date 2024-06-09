@@ -1,0 +1,29 @@
+name: shearDM
+channels:
+  - conda-forge
+  - anaconda
+  - defaults
+dependencies:
+  - python=3.9
+  - conda
+  - shredx
+  - des-pixcorrect
+  - matplotlib
+  - pandas
+  - numpy
+  - cython
+  - scipy
+  - numba
+  - h5py
+  - ngmix
+  - galsim
+  - click
+  - jinja2
+  - joblib
+  - fitsio
+  - tqdm
+  - des-easyaccess
+  - oracle-instant-client
+  - healpy
+  - jupyter
+  - ipython
