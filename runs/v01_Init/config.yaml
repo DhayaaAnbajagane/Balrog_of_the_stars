@@ -1,0 +1,31 @@
+survey_kws:
+  name: DR3
+
+gal_kws:
+  type: exp
+  gal_mag: custom
+  
+  BlankImage: False
+
+  size_min: -1000000
+  size_max: 5.0
+  mag_min: -1000
+  mag_max: 1000
+  gal_ratio: 0.5
+
+  circular: False
+  extinction: True
+
+star_kws:
+  mag_min: -1000
+  mag_max: 1000
+
+files:
+  save_meds: False
+  clean_tmpdir: False
+     
+psf_kws:
+  type: psfex_deconvolved
+
+true_detection:
+  box_size: 32
