@@ -87,6 +87,7 @@ def galsim(tilename, bands, output_desdata, seed, config_file):
         tilename=tilename,
         bands=[b for b in bands],
         gal_kws=config['gal_kws'],
+        star_kws=config['star_kws'],
         psf_kws=config['psf_kws'])
     sim.run()
 
@@ -221,12 +222,12 @@ def fitvd(tilename, bands, output_desdata, seed, config_file, fitvd_config_file,
     with open(config_file, 'r') as fp:
         config = yaml.load(fp, Loader=yaml.Loader)
 
-    Shredx = MakeShredxCats(output_meds_dir=output_desdata,
-                            tilename=tilename,
-                            bands=[b for b in bands],
-                            config=config,
-                            shredx_config_path = shredx_config_file)
-    Shredx.run()
+    # Shredx = MakeShredxCats(output_meds_dir=output_desdata,
+    #                         tilename=tilename,
+    #                         bands=[b for b in bands],
+    #                         config=config,
+    #                         shredx_config_path = shredx_config_file)
+    # Shredx.run()
 
 
     Fitvd = MakeFitvdCats(output_meds_dir=output_desdata,

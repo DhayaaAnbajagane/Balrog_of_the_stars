@@ -23,7 +23,8 @@ from sky_bounding import get_rough_sky_bounds, radec_to_uv
 from wcsing import get_esutil_wcs, get_galsim_wcs
 from galsiming import render_sources_for_image, Our_params
 from psf_wrapper import PSFWrapper
-from realistic_dwarfing import init_dwarf_catalog, get_dwarf_object
+from realistic_galaxying import init_desdf_catalog, get_object
+from realistic_starsing import init_peter_starsim_catalog
 from coadding import MakeSwarpCoadds
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ class End2EndSimulation(object):
         self.noise_rng     = np.random.RandomState(seed=seeds[1])
         
         #one for drawing random objects from dwarf catalog
-        self.dwarfsource_rng  = np.random.RandomState(seed=seeds[2])
+        self.source_rng  = np.random.RandomState(seed=seeds[2])
         
         # load the image info for each band
         self.info = {}
@@ -141,11 +142,11 @@ class End2EndSimulation(object):
                     image_path=se_info['image_path'],
                     image_ext=se_info['image_ext']),
                 psf=self._make_psf_wrapper(se_info=se_info),
-                dwarfsource_rng = self.dwarfsource_rng,
+                source_rng = self.source_rng,
                 simulated_catalog = self.simulated_catalog,
                 band = band)
             
-            if self.gal_kws.get('galaxies', True):
+            if self.gal_kws.get('inject_objects', True):
                 jobs.append(joblib.delayed(_render_se_image)(
                     se_info=se_info,
                     band=band,
@@ -160,9 +161,7 @@ class End2EndSimulation(object):
                 print("NO OBJECTS SIMULATED")
                 jobs.append(joblib.delayed(_move_se_img_wgt_bkg)(se_info=se_info, output_meds_dir=self.output_meds_dir))
 
-        #Have to do single threaded, cause dwarves are large objects (100s of arcsec)
-        #so it is highly memory intensive to draw in galsim, on DECam images.
-        with joblib.Parallel(n_jobs=40, backend='loky', verbose=50, max_nbytes=None) as p:
+        with joblib.Parallel(n_jobs = os.cpu_count()//2, backend='loky', verbose=50, max_nbytes=None) as p:
             p(jobs)
 
     def _make_psf_wrapper(self, *, se_info):
@@ -221,87 +220,20 @@ class End2EndSimulation(object):
         print("TRUTH CATALOG HAS %d OBJECTS" % len(x_dwarf))
         
         
-        #Find which dwarfs we will inject and subsample just the handful we need for this coadd
-        mask_dwarf = self.simulated_catalog.cat['ISDIFFUSE'] == True
-        mask_star  = self.simulated_catalog.cat['ISDIFFUSE'] == False
-        inds_dwarf = self.dwarfsource_rng.choice(np.where(mask_dwarf)[0], len(ra_dwarf))
+        #Find subset of gals, then subset of stars. Join them at the right ratio. Then shuffle so positions are randomized
+        gals = self.source_rng.choice(np.where(self.simulated_catalog['STAR'] == False)[0], len(x_dwarf), replace = True)
+        star = self.source_rng.choice(np.where(self.simulated_catalog['STAR'] == True)[0], len(x_dwarf),  replace = True)
+        splt = int(self.gal_kws['gal_ratio'] * len(x_dwarf))
+        inds = self.source_rng.choice(np.concatenate([gals[:splt], star[splt:]]), len(x_dwarf), replace = False)
         
-        #Positions and inds. The ind column also doubles as "DWARF or STAR" column since we can use it
-        #to index into the simulated_catalog, which has this info.
-        ra, dec, x, y, inds = [], [], [], [], []
-        
-        #Loop over each dwarf and build its ra and dec
-        for d_i in tqdm(range(len(ra_dwarf)), desc = 'Building Truth catalog'):
-            
-            ind = inds_dwarf[d_i] #Find dwarf ind
-            
-            #Add dwarf properties to the inputs
-            inds += [ind]
-            ra   += [ra_dwarf[d_i]]
-            dec  += [dec_dwarf[d_i]]
-            x    += [x_dwarf[d_i]]
-            y    += [y_dwarf[d_i]]
-            
-            dwarf_id = self.simulated_catalog.cat['PARENT_ID'][ind]
-            inds_stars = np.where( (self.simulated_catalog.cat['PARENT_ID'] == dwarf_id) & mask_star)[0] #Find all stars associated with this
-            Nstars   = len(inds_stars)
-            #Get properties of the dwarf
-            beta   = self.simulated_catalog.cat['beta'][ind]
-            q      = self.simulated_catalog.cat['q'][ind]
-            hlr    = self.simulated_catalog.cat['hlr'][ind]
-            r0     = hlr / 1.6783469900166605/0.263 #Convert from hlr to scale radius of exponential, and in pixel units
-            ang    = self.simulated_catalog.rand_rot[ind] * np.pi/180 #put it in radians
-            
-            
-            if True:
-                #Find star position using analytical inversion. We sample uniform dist. and convert to exponential dist.
-                r = -r0 * np.log(1 - self.dwarfsource_rng.uniform(1e-16, 1 - 1e-4, Nstars)) #Use min != 0 else you will get r = infty error
-                r = np.clip(r, 0, 5*hlr/0.263) #Prevent rare chances that star is placed crazy far away from the galaxy.
-
-                #Get the x, y of the star. THIS IS W.R.T to galaxy. So x = 0 means center of dwarf. We will fix this later.
-                t = self.dwarfsource_rng.uniform(0, 2*np.pi, Nstars) #Random angle. This is ang pos of star within galaxy
-                x_tmp = r * np.cos(t)
-                y_tmp = r * np.sin(t)
-
-                #Now we change the position to account for galaxy ellipticity
-                jac = galsim.Shear(beta = beta * galsim.degrees, q = q).getMatrix()
-
-                x_star = x_tmp*jac[0, 0] + y_tmp*jac[0, 1]
-                y_star = x_tmp*jac[1, 0] + y_tmp*jac[1, 1]
-
-                #Finally, account for the new (random) galaxy rotation
-                x_star_final = + x_star * np.cos(ang) + y_star * np.sin(ang)
-                y_star_final = - x_star * np.sin(ang) + y_star * np.cos(ang)
-
-
-                #Okay, now that all the rotation transforms are done, 
-                #let's add back the host dwarf galaxy position (in image space)
-                x_star_final += x_dwarf[d_i]
-                y_star_final += y_dwarf[d_i]
-
-
-                #Also need to get the corresponding RA and DEC now (skycoord). We already loaded the coadd_wcs before.
-                #It's fine if a star goes "out of bounds" of coadd in x, y, ra, dec. We will remove out-of-bounds objs in later step
-                ra_star_final, dec_star_final = coadd_wcs.image2sky(x_star_final, y_star_final)
-
-
-                #Now just append everything to list of injection objects
-                inds += list(inds_stars)
-                ra   += list(ra_star_final)
-                dec  += list(dec_star_final)
-                x    += list(x_star_final)
-                y    += list(y_star_final)
-            
-        
-        inds = np.array(inds)
-        ra   = np.array(ra)
-        dec  = np.array(dec)
-        x    = np.array(x)
-        y    = np.array(y)
+        ra   = np.array(ra_dwarf)
+        dec  = np.array(dec_dwarf)
+        x    = np.array(x_dwarf)
+        y    = np.array(y_dwarf)
         
         dtype = [('number', 'i8'), ('ID', 'i8'), ('ind', 'i8'), 
                  ('ra',  'f8'), ('dec', 'f8'), ('x', 'f8'), ('y', 'f8'),
-                 ('a_world', 'f8'), ('b_world', 'f8'), ('size', 'f8')]
+                 ('a_world', 'f8'), ('b_world', 'f8'), ('size', 'f8'), ('star', 'i4'), ('orig_inds', 'i8')]
         for b in self.bands:
             dtype += [('A%s'%b, 'f8')]
             
@@ -316,7 +248,9 @@ class End2EndSimulation(object):
         truth_cat['x']   = x
         truth_cat['y']   = y
         
-        truth_cat['ID']  = self.simulated_catalog.cat['ID'][truth_cat['ind']]
+        truth_cat['ID']    = self.simulated_catalog['ID'][truth_cat['ind']]
+        truth_cat['star']  = self.simulated_catalog['STAR'][truth_cat['ind']].astype(int)
+        truth_cat['orig_inds'] = self.simulated_catalog['IND'][truth_cat['ind']]
         
         if self.gal_kws['extinction'] == True:
             
@@ -350,8 +284,53 @@ class End2EndSimulation(object):
         
         """Makes sim catalog"""
         
-        self.simulated_catalog = init_dwarf_catalog(rng = self.dwarfsource_rng)
+        galaxy_catalog = init_desdf_catalog(rng = self.source_rng)
+        star_catalog   = init_peter_starsim_catalog()
+        
+        mag_i = 30 - 2.5*np.log10(star_catalog['i'])
+        Mask  = (mag_i > self.star_kws['mag_min']) &  (mag_i < self.star_kws['mag_max'])
+        star_catalog = star_catalog[Mask]
+        star_index   = np.where(Mask)[0]
+        
+        mag_i = 30 - 2.5*np.log10(galaxy_catalog.cat['FLUX_I'])
+        T     = galaxy_catalog.cat['BDF_T']
+        hlr   = np.where(T >= 0, np.sqrt(galaxy_catalog.cat['BDF_T']), -99) #This is only approximate
+        Mask  = ((mag_i > self.gal_kws['mag_min']) &  (mag_i < self.gal_kws['mag_max']) &
+                 (hlr > self.gal_kws['size_min'])  &  (hlr < self.gal_kws['size_max'])
+                )
+        gal_index = np.where(Mask)[0]
+        
+        new_cat_size   = len(galaxy_catalog.cat[Mask]) + len(star_catalog)
+        
+        new_cat = np.dtype([
+                           ('BDF_FRACDEV', float), ('BDF_G1', float), ('BDF_G2', float),
+                           ('BDF_T', float), ('FLUX_G', float), ('FLUX_R', float), ('FLUX_I', float), ('FLUX_Z', float),
+                           ('STAR', bool), ('ANGLE', float), ('ID', float), ('IND', float)
+                           ])
+        
+        new_cat = np.zeros(new_cat_size, dtype = new_cat)
+        
+        N = len(galaxy_catalog.cat[Mask])
+        
+        for k in ['BDF_FRACDEV', 'BDF_G1', 'BDF_G2', 'BDF_T', 'FLUX_G', 'FLUX_R', 'FLUX_I', 'FLUX_Z']:
+            new_cat[k][:N] = galaxy_catalog.cat[k][Mask]
             
+        new_cat['ANGLE'][:N] = galaxy_catalog.rand_rot[Mask]
+        new_cat['STAR'][:N]  = False
+        new_cat['ID'][:N]    = galaxy_catalog.cat['ID'][Mask]
+        new_cat['IND'][:N]   = gal_index
+        
+            
+        for k in ['BDF_FRACDEV', 'BDF_G1', 'BDF_G2', 'BDF_T', 'FLUX_Z', 'ANGLE']:
+            new_cat[k][N:] = -9999
+        
+        for b in 'griz': new_cat['FLUX_%s' % b.upper()][N:] = np.power(10, -(star_catalog[b] - 30)/2.5)
+        new_cat['STAR'][N:] = True
+        new_cat['ID'][N:]   = star_catalog['star_id']
+        new_cat['IND'][N:]  = star_index
+        
+        self.simulated_catalog = new_cat
+        
         return self.simulated_catalog
 
 
@@ -417,14 +396,24 @@ def _render_se_image(
         noise_seed=noise_seed,
         gal_kws = gal_kws)
 
+
     # step 4 - write to disk
-    _write_se_img_wgt_bkg(
-        image=im,
-        weight=wgt,
-        background=bkg,
-        bmask=bmask,
-        se_info=se_info,
-        output_meds_dir=output_meds_dir)
+    counter = 0
+    while counter < 10:
+        try:
+            _write_se_img_wgt_bkg(
+                image=im,
+                weight=wgt,
+                background=bkg,
+                bmask=bmask,
+                se_info=se_info,
+                output_meds_dir=output_meds_dir)
+            break
+        except:
+            print("BROKE DURING WRITE STEP. RETRYING AGAIN ... (%d TRIES SO FAR)" % (counter + 1))
+        
+        counter += 1
+        
 
 
 def _cut_tuth_cat_to_se_image(*, truth_cat, se_info, bounds_buffer_uv):
@@ -597,12 +586,12 @@ class LazySourceCat(object):
         Returns the object to be rendered from the truth catalog at
         index `ind`.
     """
-    def __init__(self, *, truth_cat, wcs, psf, band = None, dwarfsource_rng = None, simulated_catalog = None):
+    def __init__(self, *, truth_cat, wcs, psf, band = None, source_rng = None, simulated_catalog = None):
         self.truth_cat = truth_cat
         self.wcs = wcs
         self.psf = psf        
         
-        self.dwarfsource_rng = dwarfsource_rng
+        self.source_rng = source_rng
         
         self.simulated_catalog = simulated_catalog
         self.band    = band
@@ -615,10 +604,10 @@ class LazySourceCat(object):
             dec = self.truth_cat['dec'][ind] * galsim.degrees))
         
         
-        obj = get_dwarf_object(ind  = self.truth_cat['ind'][ind],
-                               rng  = self.dwarfsource_rng, 
-                               data = self.simulated_catalog,
-                               band = self.band)
+        obj = get_object(ind  = self.truth_cat['ind'][ind],
+                         rng  = self.source_rng, 
+                         data = self.simulated_catalog,
+                         band = self.band)
 
         #Now do extinction (the coefficients are just zero if we didnt set gal_kws['extinction'] = True)
         A_mag  = self.truth_cat[ind]['A%s' % self.band]
@@ -630,6 +619,6 @@ class LazySourceCat(object):
         obj = galsim.Convolve([obj, psf], gsparams = Our_params)
         
         #For doing photon counting, need to do some workaround
-        rng = galsim.BaseDeviate(self.dwarfsource_rng.randint(0, 2**16))
+        rng = galsim.BaseDeviate(self.source_rng.randint(0, 2**16))
         
         return (obj, rng), pos

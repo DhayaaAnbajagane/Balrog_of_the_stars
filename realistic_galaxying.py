@@ -67,24 +67,24 @@ def get_desdf_galaxy(*, desdf_ind, rng, data, band = None):
         The galaxy as a galsim object.
     """
     
-#     bulge_frac = data.cat['BDF_FRACDEV'][desdf_ind] #Fraction of bulge to total
+#     bulge_frac = data['BDF_FRACDEV'][desdf_ind] #Fraction of bulge to total
     
     if band == None:
-        flux = np.sum([data.cat['FLUX_%s' % i.upper()][desdf_ind] for i in ['r', 'i', 'z']])
+        flux = np.sum([data['FLUX_%s' % i.upper()][desdf_ind] for i in ['r', 'i', 'z']])
         print("Why am I in here", band)
     else:
-        flux = data.cat['FLUX_%s' % band.upper()][desdf_ind] #Assumed to be deredenned fluxes in DF catalog
+        flux = data['FLUX_%s' % band.upper()][desdf_ind] #Assumed to be deredenned fluxes in DF catalog
         
-#     disk  = galsim.Exponential(flux = flux,   half_light_radius = data.cat['BDF_HLR'][desdf_ind], gsparams = Our_params)
-#     bulge = galsim.DeVaucouleurs(flux = flux, half_light_radius = data.cat['BDF_HLR'][desdf_ind], gsparams = Our_params)
+#     disk  = galsim.Exponential(flux = flux,   half_light_radius = data['BDF_HLR'][desdf_ind], gsparams = Our_params)
+#     bulge = galsim.DeVaucouleurs(flux = flux, half_light_radius = data['BDF_HLR'][desdf_ind], gsparams = Our_params)
     
 #     prof  = bulge_frac*bulge + (1 - bulge_frac)*disk
-#     prof  = prof.shear(g1 = data.cat['BDF_G1'][desdf_ind], g2 = data.cat['BDF_G2'][desdf_ind])
+#     prof  = prof.shear(g1 = data['BDF_G1'][desdf_ind], g2 = data['BDF_G2'][desdf_ind])
     
-    f  = data.cat['BDF_FRACDEV'][desdf_ind]
-    g1 = data.cat['BDF_G1'][desdf_ind]
-    g2 = data.cat['BDF_G2'][desdf_ind]
-    T  = data.cat['BDF_T'][desdf_ind]
+    f  = data['BDF_FRACDEV'][desdf_ind]
+    g1 = data['BDF_G1'][desdf_ind]
+    g2 = data['BDF_G2'][desdf_ind]
+    T  = data['BDF_T'][desdf_ind]
     
     prof  = ngmix.GMixModel([0, 0, g1, g2, T, f, flux], "bdf").make_galsim_object(gsparams = Our_params)
     prof  = prof.rotate(data.rand_rot[desdf_ind]*galsim.degrees)
@@ -111,3 +111,47 @@ def get_psf_config_wldeblend(*, data):
     gs_config["type"] = "Kolmogorov"
     gs_config["fwhm"] = data.psf_fwhm
     return gs_config
+
+
+def get_object(*, ind, rng, data, band = None):
+    """Draw a galaxy from the DESDF model.
+
+    Parameters
+    ----------
+    ind : int
+        Index of object in dwarf catalog.
+    rng : np.random.RandomState
+        An RNG to use for galaxy orientation
+    data : DESDF_cat data fitsio file
+        Namedtuple with data for making galaxies via the weak lesning
+        deblending package.
+    band : character
+        A single character containing the band of the galaxy.
+        If None then average over riz bands.
+
+    Returns
+    -------
+    gal : galsim Object
+        The galaxy as a galsim object.
+    """
+    
+    flux = data['FLUX_%s' % band.upper()][ind] #Assumed to be deredenned fluxes
+    
+    
+    if data['STAR'][ind] == True:
+        
+        prof = galsim.DeltaFunction(flux = flux, gsparams = Our_params)
+        
+    
+    elif data['STAR'][ind] == False:
+    
+        f  = data['BDF_FRACDEV'][ind]
+        g1 = data['BDF_G1'][ind]
+        g2 = data['BDF_G2'][ind]
+        T  = data['BDF_T'][ind]
+
+        prof  = ngmix.GMixModel([0, 0, g1, g2, T, f, flux], "bdf").make_galsim_object(gsparams = Our_params)
+        prof  = prof.rotate(data['ANGLE'][ind]*galsim.degrees)
+    
+
+    return prof

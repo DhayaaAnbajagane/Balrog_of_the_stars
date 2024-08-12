@@ -6,24 +6,24 @@ and saving relevant quantities.
 import shutil
 import yaml
 import os
-from files import get_truth_catalog_path, get_balrog_file_path, get_band_info_file, get_mcal_file_path
+from files import (get_truth_catalog_path, get_balrog_file_path, get_band_info_file, 
+                   get_mcal_file_path, get_fitvd_path, get_meds_file_path)
 from constants import MEDSCONF
 
 
 def finalize_files(tilename, bands, output_desdata, config):
    
     try: 
+        move_Truth_cat(tilename, output_desdata); print("FINISHED MOVING TRUTH")
+        move_fitvd_cat(tilename, output_desdata); print("FINISHED MOVING FITVD")
+    
         for b in bands:
-            move_SrcExtractor_cat(tilename, b, output_desdata)
-            move_OldSrcExtractor_cat(tilename, b, output_desdata)
+            move_SrcExtractor_cat(tilename, b, output_desdata); print("FINISHED MOVING SRCEXT")
+            move_OldSrcExtractor_cat(tilename, b, output_desdata); print("FINISHED MOVING OLD SRCEXT")
             if config['files']['save_meds'] == True: 
                 move_meds(tilename, b, output_desdata)
         
-        move_metacal_cat(tilename, output_desdata)
-        move_balrog_cat(tilename, output_desdata)
-        move_Truth_cat(tilename, output_desdata)
-        move_fitvd(tilename, output_desdata)
-    
+        
     except:
         
         print("SOMETHING CRASHED. SIGH")
@@ -126,12 +126,12 @@ def move_fitvd_cat(tile, output_desdata):
             'name' : os.path.basename(os.path.dirname(output_desdata)),
             'tile' : tile}
     
-    cat_path = get_fitvd_file_path(meds_dir=output_desdata, medsconf = MEDSCONF, tilename = tile) + '/shredx.fits'
-    new_path = os.environ['BALROG_DIR'] + "/%(name)s/shredx_%(tile)s.fits" % args
-    shutil.move(cat_path, new_path)
+    # cat_path = get_fitvd_path(meds_dir=output_desdata, medsconf = MEDSCONF, tilename = tile) + '/shredx.fits'
+    # new_path = os.environ['BALROG_DIR'] + "/%(name)s/shredx_%(tile)s.fits" % args
+    # shutil.move(cat_path, new_path)
     
     
-    cat_path = get_fitvd_file_path(meds_dir=output_desdata, medsconf = MEDSCONF, tilename = tile) + '/fitvd.fits'
+    cat_path = get_fitvd_path(meds_dir=output_desdata, medsconf = MEDSCONF) + '/fitvd.fits'
     new_path = os.environ['BALROG_DIR'] + "/%(name)s/fitvd_%(tile)s.fits" % args
     shutil.move(cat_path, new_path)
          

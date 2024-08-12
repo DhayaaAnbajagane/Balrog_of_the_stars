@@ -135,8 +135,14 @@ def render_source_in_image(*, source, image_pos, local_wcs, draw_method):
 
     # draw for real
     if draw_method == 'phot':
-        stamp = source.drawImage(nx=_im.shape[1], ny=_im.shape[0], wcs=local_wcs, 
-                                 method=draw_method, offset=galsim.PositionD(x=dx, y=dy), rng = BaseDeviate)
+        try:
+            stamp = source.drawImage(nx=_im.shape[1], ny=_im.shape[0], wcs=local_wcs, 
+                                    method=draw_method, offset=galsim.PositionD(x=dx, y=dy), rng = BaseDeviate)
+        except np.core._exceptions._ArrayMemoryError:
+            print("WE HAVE REALLY BRIGHT OBJECT (BIG ARRAY OF PHOTONS...) SO SWITCHING FROM 'PHOT' TO 'AUTO'")
+            stamp = source.drawImage(nx=_im.shape[1], ny=_im.shape[0], wcs=local_wcs, 
+                                     method='auto', offset=galsim.PositionD(x=dx, y=dy))
+            
     else:
         stamp = source.drawImage(nx=_im.shape[1], ny=_im.shape[0], wcs=local_wcs, 
                                  method=draw_method, offset=galsim.PositionD(x=dx, y=dy))

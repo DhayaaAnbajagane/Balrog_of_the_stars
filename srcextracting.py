@@ -63,12 +63,13 @@ class MakeSrcExtractorCat(object):
                     'PSF'       : psf_file}
 
 
+            #MAKE SUREYOU USE _OLD CONFIG SINCE THAT SPEEDS UP SRCEXT A LOT
             srcextractor_command = "$SRCEXT_DIR/src/sex \
                                         %(DET_COADD)s[0],%(COADD)s[0] \
                                         -c $DESDM_CONFIG/Y6A1_v1_sex.config \
                                         -CHECKIMAGE_TYPE SEGMENTATION \
                                         -CHECKIMAGE_NAME %(SEG)s \
-                                        -PARAMETERS_NAME $DESDM_CONFIG/Y6A1_v1_srcex.param_diskonly \
+                                        -PARAMETERS_NAME $DESDM_CONFIG/Y6A1_v1_srcex.param_diskonly_old \
                                         -MAG_ZEROPOINT 30 \
                                         -FILTER_NAME $DESDM_CONFIG/Y6A1_v1_gauss_3.0_7x7.conv \
                                         -CATALOG_NAME %(CAT)s \

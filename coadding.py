@@ -45,6 +45,7 @@ class MakeSwarpCoadds(object):
         self._make_detection_coadd()
         self._cleanup()
             
+    
     def _make_nwgint_files(self):
         '''
         Make null weight files using pixcorrect.
@@ -65,9 +66,11 @@ class MakeSwarpCoadds(object):
             args['TILENAME'] = header['TILENAME']
             args['TILEID']   = header['TILEID']
             
-            print("Creating nwgint images for %s band" % band)
+            print("Creating nwgint images for %s band" % band, flush = True)
             
             for src in self.info[band]['src_info']:
+
+                print("Creating nwgint image for path %s" % src['image_path'], flush = True)
                 
                 args['IMAGE_PATH'] = src['image_path']#.replace(TMP_DIR, self.output_meds_dir) #Taking raw image first so don't need this
                 args['HEAD_PATH']  = src['head_path']
@@ -83,7 +86,6 @@ class MakeSwarpCoadds(object):
                                     -o %(OUT_PATH)s \
                                     --headfile %(HEAD_PATH)s \
                                     --max_cols 50  \
-                                    --v \
                                     --interp_mask TRAIL,BPM  \
                                     --invalid_mask EDGE \
                                     --null_mask BPM,BADAMP,EDGEBLEED,EDGE,CRAY,SSXTALK,STREAK,TRAIL  \
@@ -92,7 +94,7 @@ class MakeSwarpCoadds(object):
                                     --tileid %(TILEID)s \
                                     --me_wgt_keepmask STAR  \
                                     --hdupcfg $DESDM_CONFIG/Y6A1_v1_coadd_nwgint.config  \
-                                    --streak_file $DESDM_CONFIG/Y3A2_v6_streaks_update-Y1234_FINALCUT_v2.fits" % args
+                                    --streak_file $DESDM_CONFIG/Y3A2_v6_streaks_update-Y1234_FINALCUT_v2.fits > /dev/null 2>&1" % args
                 
 #                 pix_command = "$PIXCORRECT_DIR/bin/coadd_nwgint \
 #                                     -i red/D00233601_g_c50_r3650p01_immasked.fits.fz \
@@ -111,8 +113,10 @@ class MakeSwarpCoadds(object):
 #                                     --streak_file $DESDM_CONFIG/Y3A2_v5_streaks_update-Y1234_FINALCUT_v1.fits" % args
                 
                 os.system(pix_command)
+
+                print("FINISHED nwgint image for path %s" % src['image_path'], flush = True)
                
-        
+        print("WE HAVE FINISHED ALL COADD_NWGINT-ING", flush = True)
         return self.info
     
         
@@ -334,7 +338,8 @@ class MakeSwarpCoadds(object):
         #Get header from original coadd to get center in RA and DEC
         header = fitsio.read_header(self.info[self.bands[0]]['image_path'], ext = 1)
 
-        det_bands = "gri"
+        det_bands = "riz"
+        print(f"USING {det_bands} FOR DETECTION")
         
         assert np.sum([d in self.bands for d in det_bands]) == len(det_bands), "We need detection bands %s"%det_bands
 

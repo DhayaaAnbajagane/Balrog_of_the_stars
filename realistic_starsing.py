@@ -19,3 +19,10 @@ def init_lsst_starsim_catalog(*, rng):
     stars, binaries = _cached_catalog_read()
     
     return stars, binaries
+
+
+def init_peter_starsim_catalog():
+    
+    TABLE = fitsio.read('/project/chihway/dhayaa/DECADE/Peter_Files/delve_fake_stars_truth.fits')
+    
+    return TABLE
