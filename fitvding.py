@@ -209,8 +209,24 @@ class MakeFitvdCats(object):
     def run(self):
         
         self.get_file_list()
-        self.run_fitvd()
-        self.collate_fitvd()
+
+        counter = 0
+        while counter < 20:
+            
+            self.run_fitvd()
+            self.collate_fitvd()
+            counter +=1
+
+            if os.path.isfile(self.fitvd_path):
+                print("FOUND SUCCESFUL FITVD RUN. BREAKING...")
+                break
+            else:
+                print(f"DID NOT FIND SUCCESFUL FITVD RUN. RERUNNING, NOW AT ATTEMPT {counter + 1}")
+            
+
+        else:
+            print("FAILED FITVD AFTER 10th ATTEMPT. BREAKING....")
+        
         self.cleanup()
         
         print("FINISHED FITVD")

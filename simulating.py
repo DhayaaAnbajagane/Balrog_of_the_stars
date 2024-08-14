@@ -1,7 +1,7 @@
 import logging
 import shutil
 import tempfile
-import os
+import os, time
 
 import numpy as np
 import yaml
@@ -11,6 +11,7 @@ import fitsio
 import healpy as hp #Needed to read extinction map
 from esutil.ostools import StagedOutFile
 from tqdm import tqdm
+from contextlib import contextmanager
 
 from files import (
     get_band_info_file,
@@ -30,6 +31,28 @@ from coadding import MakeSwarpCoadds
 logger = logging.getLogger(__name__)
 
 TMP_DIR = os.environ['TMPDIR']
+
+import time
+import numpy as np
+from contextlib import contextmanager
+
+@contextmanager
+def retry_on_exception(se_info, max_attempts=20, sleep_time=10):
+    counter = 0
+    success = False
+    while counter < max_attempts:
+        try:
+            yield  # The block of code inside 'with' will execute here
+            success = True  # If no exception occurs, mark as successful
+            break
+        except Exception as e:
+            print(f"BROKE DURING OPERATION. RETRYING AGAIN... ({counter + 1} TRIES SO FAR)")
+            time.sleep(sleep_time + 3 * np.random.rand())
+            counter += 1
+    
+    if not success:
+        file = se_info['nwgint_path']
+        raise RuntimeError(f"FAILED WRITE ON FILE {file} AFTER 10th ATTEMPT. BREAKING....")
 
 class End2EndSimulation(object):
     """An end-to-end DES Y3 simulation.
@@ -390,30 +413,24 @@ def _render_se_image(
     
     # step 3 - add bkg and noise
     # also removes the zero point
-    im, wgt, bkg, bmask = _add_noise_mask_background(
-        image=im,
-        se_info=se_info,
-        noise_seed=noise_seed,
-        gal_kws = gal_kws)
+    with retry_on_exception(se_info = se_info, max_attempts = 20, sleep_time = 10):
+        im, wgt, bkg, bmask = _add_noise_mask_background(
+            image=im,
+            se_info=se_info,
+            noise_seed=noise_seed,
+            gal_kws = gal_kws)
 
 
     # step 4 - write to disk
-    counter = 0
-    while counter < 10:
-        try:
-            _write_se_img_wgt_bkg(
+
+    with retry_on_exception(se_info = se_info, max_attempts = 20, sleep_time = 10):
+        _write_se_img_wgt_bkg(
                 image=im,
                 weight=wgt,
                 background=bkg,
                 bmask=bmask,
                 se_info=se_info,
-                output_meds_dir=output_meds_dir)
-            break
-        except:
-            print("BROKE DURING WRITE STEP. RETRYING AGAIN ... (%d TRIES SO FAR)" % (counter + 1))
-        
-        counter += 1
-        
+                output_meds_dir=output_meds_dir)        
 
 
 def _cut_tuth_cat_to_se_image(*, truth_cat, se_info, bounds_buffer_uv):
