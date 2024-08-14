@@ -8,6 +8,7 @@ import numpy as np
 import glob
 import time
 
+
 my_parser = argparse.ArgumentParser()
 
 my_parser.add_argument('--Initialize', action='store_true', default = False)
@@ -68,7 +69,21 @@ if __name__ == '__main__':
         
     def prep_job(tilename):
         
-        os.system('python $BALROG_RUN_DIR/run_sims.py prep --tilename="%s" --bands="griz" --output-desdata="$PREP_DIR/%s/outputs_%s" --config-file="config.yaml"'%(tilename, name, tilename))
+        print("-------------------------------")
+
+        commands = []
+        for b in 'griz':
+            commands.append('python $BALROG_RUN_DIR/run_sims.py prep --tilename="%s" --bands="%s" --output-desdata="$PREP_DIR/%s/outputs_%s" --config-file="config.yaml"'%(tilename, b, name, tilename))
+
+        # Run all commands in parallel using subprocess.Popen
+        processes = [sp.Popen(command, shell = True) for command in commands]
+
+        # Wait for all processes to complete
+        for process in processes: process.wait()
+            
+        print("-------------------------------")
+        print("DONE PREPPING")
+        print("-------------------------------")
         
         
     def current_job_count():

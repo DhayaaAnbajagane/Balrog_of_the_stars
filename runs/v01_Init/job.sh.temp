@@ -82,17 +82,6 @@ echo "Completed coadding and starting source-extractor at $NOW"
 
 
 python run_sims.py \
-  true-detection \
-  --tilename="$tilename" \
-  --bands="$bands" \
-  --output-desdata="$output" \
-  --config-file="runs/{{ model_name }}/config.yaml"
-
-NOW=$( date "+%H:%M:%S" )
-echo "Completed true-detection and starting meds at $NOW"
-
-
-python run_sims.py \
   meds \
   --tilename="$tilename" \
   --bands="$bands" \
