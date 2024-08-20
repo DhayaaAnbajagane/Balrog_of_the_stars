@@ -32,27 +32,23 @@ logger = logging.getLogger(__name__)
 
 TMP_DIR = os.environ['TMPDIR']
 
-import time
-import numpy as np
-from contextlib import contextmanager
-
-@contextmanager
-def retry_on_exception(se_info, max_attempts=20, sleep_time=10):
-    counter = 0
-    success = False
-    while counter < max_attempts:
-        try:
-            yield  # The block of code inside 'with' will execute here
-            success = True  # If no exception occurs, mark as successful
-            break
-        except Exception as e:
-            print(f"BROKE DURING OPERATION. RETRYING AGAIN... ({counter + 1} TRIES SO FAR)")
-            time.sleep(sleep_time + 3 * np.random.rand())
-            counter += 1
-    
-    if not success:
-        file = se_info['nwgint_path']
-        raise RuntimeError(f"FAILED WRITE ON FILE {file} AFTER 10th ATTEMPT. BREAKING....")
+from functools import wraps
+def retry_on_exception(max_attempts=20, sleep_time=10):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            counter = 0
+            while counter < max_attempts:
+                try:
+                    return func(*args, **kwargs)  # Attempt to execute the function
+                except Exception as e:
+                    print(f"BROKE DURING OPERATION. RETRYING AGAIN... ({counter + 1} TRIES SO FAR)")
+                    time.sleep(sleep_time + 3 * np.random.rand())
+                    counter += 1
+            # If we reach here, all attempts have failed
+            raise RuntimeError(f"FAILED OPERATION AFTER {max_attempts} ATTEMPTS. BREAKING....")
+        return wrapper
+    return decorator
 
 class End2EndSimulation(object):
     """An end-to-end DES Y3 simulation.
@@ -413,24 +409,21 @@ def _render_se_image(
     
     # step 3 - add bkg and noise
     # also removes the zero point
-    with retry_on_exception(se_info = se_info, max_attempts = 20, sleep_time = 10):
-        im, wgt, bkg, bmask = _add_noise_mask_background(
-            image=im,
-            se_info=se_info,
-            noise_seed=noise_seed,
-            gal_kws = gal_kws)
+    im, wgt, bkg, bmask = _add_noise_mask_background(
+        image=im,
+        se_info=se_info,
+        noise_seed=noise_seed,
+        gal_kws = gal_kws)
 
 
     # step 4 - write to disk
-
-    with retry_on_exception(se_info = se_info, max_attempts = 20, sleep_time = 10):
-        _write_se_img_wgt_bkg(
-                image=im,
-                weight=wgt,
-                background=bkg,
-                bmask=bmask,
-                se_info=se_info,
-                output_meds_dir=output_meds_dir)        
+    _write_se_img_wgt_bkg(
+            image=im,
+            weight=wgt,
+            background=bkg,
+            bmask=bmask,
+            se_info=se_info,
+            output_meds_dir=output_meds_dir)        
 
 
 def _cut_tuth_cat_to_se_image(*, truth_cat, se_info, bounds_buffer_uv):
@@ -467,6 +460,7 @@ def _render_all_objects(
     return im.array
 
 
+@retry_on_exception(max_attempts = 20, sleep_time = 5)
 def _add_noise_mask_background(*, image, se_info, noise_seed, gal_kws):
     """add noise, mask and background to an image, remove the zero point"""
 
@@ -504,6 +498,7 @@ def _add_noise_mask_background(*, image, se_info, noise_seed, gal_kws):
     return image, wgt, bkg, bmask
 
 
+@retry_on_exception(max_attempts = 20, sleep_time = 5)
 def _write_se_img_wgt_bkg(
         *, image, weight, background, bmask, se_info, output_meds_dir):
     
@@ -545,6 +540,7 @@ def _write_se_img_wgt_bkg(
                 fits[se_info['bkg_ext']].write(background)
                 
 
+@retry_on_exception(max_attempts = 20, sleep_time = 5)
 def _move_se_img_wgt_bkg(*, se_info, output_meds_dir):
     '''
     Use this for blank image run where we do no source injection
