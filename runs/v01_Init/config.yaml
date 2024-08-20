@@ -22,7 +22,7 @@ star_kws:
 
 files:
   save_meds: False
-  clean_tmpdir: False
+  clean_tmpdir: True
      
 psf_kws:
   type: psfex_deconvolved

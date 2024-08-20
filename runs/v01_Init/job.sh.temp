@@ -20,6 +20,8 @@ then
 fi
 
 
+set -e #So that job ends when any task fails
+
 output="$PREP_DIR/{{ model_name }}/outputs_{{ tilename }}"
 bands="griz"
 tilename="{{ tilename }}"
