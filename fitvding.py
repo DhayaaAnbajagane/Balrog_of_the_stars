@@ -211,7 +211,7 @@ class MakeFitvdCats(object):
         self.get_file_list()
 
         counter = 0
-        while counter < 20:
+        while counter < 5:
             
             self.run_fitvd()
             self.collate_fitvd()

@@ -180,7 +180,7 @@ class End2EndSimulation(object):
                 print("NO OBJECTS SIMULATED")
                 jobs.append(joblib.delayed(_move_se_img_wgt_bkg)(se_info=se_info, output_meds_dir=self.output_meds_dir))
 
-        with joblib.Parallel(n_jobs = os.cpu_count()//2, backend='loky', verbose=50, max_nbytes=None) as p:
+        with joblib.Parallel(n_jobs = 4, backend='loky', verbose=50, max_nbytes=None) as p:
             p(jobs)
 
     def _make_psf_wrapper(self, *, se_info):
@@ -240,19 +240,23 @@ class End2EndSimulation(object):
         
         
         #Find subset of gals, then subset of stars. Join them at the right ratio. Then shuffle so positions are randomized
-        gals = self.source_rng.choice(np.where(self.simulated_catalog['STAR'] == False)[0], len(x_dwarf), replace = True)
-        star = self.source_rng.choice(np.where(self.simulated_catalog['STAR'] == True)[0], len(x_dwarf),  replace = True)
-        splt = int(self.gal_kws['gal_ratio'] * len(x_dwarf))
-        inds = self.source_rng.choice(np.concatenate([gals[:splt], star[splt:]]), len(x_dwarf), replace = False)
+        isgal  = self.simulated_catalog['STAR'] == False
+        isstar = self.simulated_catalog['STAR'] == True
+        magwgt = mock_balrog_sigmoid(30 - 2.5*np.log10(self.simulated_catalog['FLUX_G'][isgal]), 25, self.source_rng)
+        gals   = self.source_rng.choice(np.where(isgal)[0],  len(x_dwarf), replace = True, p = magwgt)
+        star   = self.source_rng.choice(np.where(isstar)[0], len(x_dwarf), replace = True)
+        splt   = int(self.gal_kws['gal_ratio'] * len(x_dwarf))
+        inds   = self.source_rng.choice(np.concatenate([gals[:splt], star[splt:]]), len(x_dwarf), replace = False)
         
-        ra   = np.array(ra_dwarf)
-        dec  = np.array(dec_dwarf)
-        x    = np.array(x_dwarf)
-        y    = np.array(y_dwarf)
         
-        dtype = [('number', 'i8'), ('ID', 'i8'), ('ind', 'i8'), 
-                 ('ra',  'f8'), ('dec', 'f8'), ('x', 'f8'), ('y', 'f8'),
-                 ('a_world', 'f8'), ('b_world', 'f8'), ('size', 'f8'), ('star', 'i4'), ('orig_inds', 'i8')]
+        ra     = np.array(ra_dwarf)
+        dec    = np.array(dec_dwarf)
+        x      = np.array(x_dwarf)
+        y      = np.array(y_dwarf)
+        
+        dtype  = [('number', 'i8'), ('ID', 'i8'), ('ind', 'i8'), 
+                  ('ra',  'f8'), ('dec', 'f8'), ('x', 'f8'), ('y', 'f8'),
+                  ('a_world', 'f8'), ('b_world', 'f8'), ('size', 'f8'), ('star', 'i4'), ('orig_inds', 'i8')]
         for b in self.bands:
             dtype += [('A%s'%b, 'f8')]
             
@@ -635,3 +639,29 @@ class LazySourceCat(object):
         rng = galsim.BaseDeviate(self.source_rng.randint(0, 2**16))
         
         return (obj, rng), pos
+    
+
+def mock_balrog_sigmoid(mag_ref, sigmoid_x0, rng):
+    """
+    
+    Function for selecting deep field galaxies at a rate that follows a sigmoid function that smoothly transitions from 1 for bright objects, to a value of 0 for faint objects. 
+    Parameters
+    ----------
+    deep_data : pandas dataframe
+        Pandas dataframe containing the deep field data.
+    sigmoid_x0 : float
+        Magnitude value at which the sigmoid function transitions from 1 to 0.
+    N : int
+        Number of galaxies to be drawn.
+    ref_mag_col : string
+        Column name of the reference magnitude in deep_data
+    Returns
+    -------
+    weights
+    """
+
+    weights = 1.0 - 1.0 / (1.0 + np.exp(-4.0 * (mag_ref - sigmoid_x0)))
+    weights = np.where(np.isfinite(weights), weights, 0) #Bad values just have zero weights
+    weights /= np.sum(weights) #Need to normalize ourselves since rng choice doesn't do this
+
+    return weights
