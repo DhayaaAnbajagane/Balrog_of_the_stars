@@ -11,9 +11,9 @@ PATH=$PATH:/home/dhayaa/Desktop/DECADE/cfitsio-4.0.0/
 export EBV_PATH=/project/chihway/dhayaa/DECADE/Imsim_Inputs/ebv_sfd98_fullres_nside_4096_ring_equatorial.fits
 export CATDESDF_PATH=/project/chihway/dhayaa/DECADE/Peter_Files/DESY3_Deepfields.fits
 
-export PREP_DIR=/scratch/midway2/dhayaa/PREP_OUTPUTS
-export TMPDIR=/scratch/midway2/dhayaa/TMP_DIR
-export MEDS_DIR=/scratch/midway2/dhayaa/MEDS_DIR
+export PREP_DIR=/project2/chihway/dhayaa/DECADE/TMP_SCRATCH/PREP_OUTPUTS
+export TMPDIR=/project2/chihway/dhayaa/DECADE/TMP_SCRATCH/TMP_DIR
+export MEDS_DIR=/project2/chihway/dhayaa/DECADE/TMP_SCRATCH/MEDS_DIR
 export BALROG_DIR=/project2/chihway/dhayaa/DECADE/Balrog_Stars/
 export BALROG_RUN_DIR=/home/dhayaa/Desktop/DECADE/Balrog_of_the_stars/
 export DESDM_CONFIG=/home/dhayaa/Desktop/DECADE/Y6DESDM
