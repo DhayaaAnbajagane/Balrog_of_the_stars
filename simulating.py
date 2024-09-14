@@ -180,8 +180,19 @@ class End2EndSimulation(object):
                 print("NO OBJECTS SIMULATED")
                 jobs.append(joblib.delayed(_move_se_img_wgt_bkg)(se_info=se_info, output_meds_dir=self.output_meds_dir))
 
-        with joblib.Parallel(n_jobs = 4, backend='loky', verbose=50, max_nbytes=None) as p:
-            p(jobs)
+        try:
+            with joblib.Parallel(n_jobs = 4, backend='loky', verbose=50, max_nbytes=None) as p:
+                p(jobs)
+        
+        except Exception as e:
+            print("======================================================================================")
+            print("======================================================================================")
+            print(f"\n\n\n HIT EXCEPTION {e}. RETRYING SINGLE-THREADED VERSION \n\n\n ")
+            print("======================================================================================")
+            print("======================================================================================")
+            
+            with joblib.Parallel(n_jobs = 1, verbose=50, max_nbytes=None) as p:
+                p(jobs)
 
     def _make_psf_wrapper(self, *, se_info):
         
@@ -216,7 +227,7 @@ class End2EndSimulation(object):
             image_path=self.info[band]['image_path'],
             image_ext=self.info[band]['image_ext'])
 
-        radius = 2*self.gal_kws['size_max']/0.263 #Radius of largest galaxy in pixel units. Factor of 2 to prevent overlap
+        radius = 1.5 * self.gal_kws['spacing'] / 0.263 #Radius of largest galaxy in pixel units. Factor of 2 to prevent overlap
         
         #These are the positions of the GALAXIES. We'll do the stars ourselves.
         ra_dwarf, dec_dwarf, x_dwarf, y_dwarf = make_coadd_hexgrid_radec(radius = radius,
@@ -636,7 +647,7 @@ class LazySourceCat(object):
         obj = galsim.Convolve([obj, psf], gsparams = Our_params)
         
         #For doing photon counting, need to do some workaround
-        rng = galsim.BaseDeviate(self.source_rng.randint(0, 2**16))
+        rng = galsim.BaseDeviate(self.source_rng.randint(0, 2**10))
         
         return (obj, rng), pos
     
