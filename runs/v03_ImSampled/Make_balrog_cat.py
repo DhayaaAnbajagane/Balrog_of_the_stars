@@ -124,7 +124,7 @@ if __name__ == "__main__":
     jobs = [joblib.delayed(my_func)(i) for i in range(len(files))]
 
     with joblib.parallel_backend("loky"):
-        outputs = joblib.Parallel(n_jobs = -1, verbose=10)(jobs)
+        outputs = joblib.Parallel(n_jobs = 4, verbose=10)(jobs)
         
         for o in outputs:
             FINAL_CAT[o[0]] = o[1]
